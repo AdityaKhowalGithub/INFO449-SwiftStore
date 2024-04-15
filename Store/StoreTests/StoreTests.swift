@@ -66,4 +66,11 @@ TOTAL: $7.97
 """
         XCTAssertEqual(expectedReceipt, receipt.output())
     }
+    
+    
+    /*Create a unit test that tests adding a single Item to the Register and displays its subtotal (which should be the single Item's price).*/
+    func testSingleItem() {
+        register.scan(Item(name: "Beans", priceEach: 499))
+        XCTAssertEqual(499, register.subtotal())
+    }
 }
