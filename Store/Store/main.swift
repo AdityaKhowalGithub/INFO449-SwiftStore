@@ -77,19 +77,27 @@ class Receipt {
        receiptText += "TOTAL: $\(totalFormatted)"
        return receiptText
     }
+    func getItems() -> [SKU]{
+        return items
+    }
 }
 
 
 class Register {
     private var receipt: Receipt
+    private var pricingScheme: PricingScheme?
+    init(pricingScheme: PricingScheme? = nil) {
+        self.receipt = Receipt()
+        self.pricingScheme = pricingScheme
+    }
     init(){
         self.receipt = Receipt()
     }
     func scan(_ item: SKU){
         receipt.add(item)
     }
-    func subtotal() -> Int{
-        return receipt.total()
+    func subtotal() -> Int {
+        return pricingScheme?.apply(items: receipt.getItems()) ?? receipt.total()
     }
     func total() -> Receipt{
         let r = receipt
@@ -105,4 +113,129 @@ class Store {
         return "Hello world"
     }
 }
+
+protocol PricingScheme {
+    func apply(items: [SKU]) -> Int
+}
+class TwoForOnePricing: PricingScheme {
+    private let itemName: String
+    private let singlePrice: Int
+    
+    init(itemName: String, singlePrice: Int) {
+        self.itemName = itemName
+        self.singlePrice = singlePrice
+    }
+    
+    func apply(items: [SKU]) -> Int {
+        let relevantItems = items.filter { $0.name == itemName }
+        let groupsOfThree = relevantItems.count / 3
+        let remainder = relevantItems.count % 3
+        return (groupsOfThree * 2 + remainder) * singlePrice
+    }
+}
+
+class GroupedPricing: PricingScheme {
+    private let itemsRequired: [String]
+    private let discountPercent: Double
+    
+    init(itemsRequired: [String], discountPercent: Double) {
+        self.itemsRequired = itemsRequired
+        self.discountPercent = discountPercent
+    }
+    
+    func apply(items: [SKU]) -> Int {
+        let filteredItems = items.filter { itemsRequired.contains($0.name) }
+        guard filteredItems.count == itemsRequired.count else { return items.reduce(0) { $0 + $1.price() } }
+        let discountedPrice = filteredItems.reduce(0) { $0 + Int(Double($1.price()) * (1 - discountPercent)) }
+        let nonDiscountedPrice = items.filter { !itemsRequired.contains($0.name) }.reduce(0) { $0 + $1.price() }
+        return discountedPrice + nonDiscountedPrice
+    }
+}
+
+
+protocol WeightedSKU: SKU {
+    var weight: Double { get }
+}
+
+class WeightedItem: WeightedSKU {
+    var name: String
+    private var pricePerPound: Int
+    var weight: Double
+    
+    init(name: String, pricePerPound: Int, weight: Double) {
+        self.name = name
+        self.pricePerPound = pricePerPound
+        self.weight = weight
+    }
+    
+    func price() -> Int {
+        return Int(Double(pricePerPound) * weight)
+    }
+}
+
+
+class Coupon: PricingScheme {
+    var itemName: String
+    var discount: Double // 15% discount
+    
+    init(itemName: String, discount: Double) {
+        self.itemName = itemName
+        self.discount = discount
+    }
+    
+    func apply(items: [SKU]) -> Int {
+        var total = 0
+        var discountApplied = false
+        for item in items {
+            if !discountApplied && item.name == itemName {
+                total += Int(Double(item.price()) * (1 - discount))
+                discountApplied = true
+            } else {
+                total += item.price()
+            }
+        }
+        return total
+    }
+}
+
+class RainCheck: PricingScheme {
+    var itemName: String
+    var discountedPrice: Int
+    
+    init(itemName: String, discountedPrice: Int) {
+        self.itemName = itemName
+        self.discountedPrice = discountedPrice
+    }
+    
+    func apply(items: [SKU]) -> Int {
+        var total = 0
+        var discountApplied = false
+        for item in items {
+            if !discountApplied && item.name == itemName {
+                total += discountedPrice
+                discountApplied = true
+            } else {
+                total += item.price()
+            }
+        }
+        return total
+    }
+}
+
+protocol Taxable: SKU {
+    func tax() -> Int
+}
+
+extension Taxable {
+    func tax() -> Int {
+        let calculatedTax = Double(price()) * 0.10
+        return Int(round(calculatedTax)) // Round to nearest integer
+    }
+}
+
+class NonEdibleItem: Item, Taxable {
+    // Inherits from Item and implements Taxable
+}
+
+
 
